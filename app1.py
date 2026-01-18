@@ -60,6 +60,8 @@ if 'generated_media' not in st.session_state or st.session_state.generated_media
 # For the filtering/recommendation logic
 if 'visible_items' not in st.session_state: st.session_state.visible_items = {}
 if 'hidden_items' not in st.session_state: st.session_state.hidden_items = {}
+if 'wiki_genre' not in st.session_state: st.session_state.wiki_genre = None
+if 'wiki_data' not in st.session_state: st.session_state.wiki_data = None
 
 # --- 3. View Logic (Router) ---
 
@@ -181,11 +183,44 @@ def render_sidebar():
                     st.rerun()
 
 def render_home():
-    st.markdown("# 🎮 Game Design Dashboard")
     
-    if not st.session_state.proposals:
-        st.info("👈 Please configure your project in the sidebar to begin.")
-        return
+    # 1. System Intro
+    st.markdown("""
+    <div style="text-align: center; padding: 40px 20px;">
+        <h1 style="background: -webkit-linear-gradient(45deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 3.5rem;">
+            Indie Game Studio Pro
+        </h1>
+        <p style="font-size: 1.2rem; color: #cbd5e1; max-width: 800px; margin: 0 auto;">
+            Your AI-powered co-founder for game development. <br>
+            Explore genres below OR use the sidebar to generate a custom proposal.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. Interactive Genre Cloud
+    st.markdown("### 🔥 Trending Genres Explorer")
+    popular_genres = [
+        "Roguelike", "Metroidvania", "Cyberpunk RPG", "Visual Novel", 
+        "Hypercasual", "Turn-based Strategy", "Survival Horror", "Platformer",
+        "Deckbuilder", "Idle Clicker", "Tower Defense", "Puzzle", "FPS", "MOBA"
+    ]
+    
+    cloud_cols = st.columns(4)
+    for i, genre in enumerate(popular_genres):
+        with cloud_cols[i % 4]:
+            if st.button(f"🏷️ {genre}", key=f"cloud_{i}", use_container_width=True):
+                st.session_state.wiki_genre = genre
+                with st.spinner(f"Fetching {genre} encyclopedia data..."):
+                    info = st.session_state.game_client.get_genre_wiki_info(genre)
+                    st.session_state.wiki_data = info
+                st.session_state.view = 'wiki'
+                st.rerun()
+    
+    st.markdown("---")
+
+    
+    if st.session_state.proposals:
+        st.subheader("📋 Your Generated Proposals")
 
     # --- Section 1: Achievable Genres ---
     st.subheader("✅ Achievable Game Genres")
@@ -356,6 +391,99 @@ def render_detail():
                     use_container_width=True
                 )
 
+def render_genre_wiki():
+    genre = st.session_state.wiki_genre
+    info = st.session_state.wiki_data or {"summary": "Loading...", "tags": []}
+
+    # --- Navigation ---
+    if st.button("⬅️ Back to Home"):
+        go_home()
+        st.rerun()
+
+    # --- 1. Wikipedia Style Header ---
+    st.title(f"📚 {genre}")
+    st.markdown(f"""
+    <div style="background: #1e293b; padding: 20px; border-left: 5px solid #818cf8; border-radius: 5px;">
+        <p style="font-size: 1.1rem; font-style: italic;">"{info.get('summary')}"</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- 2. Related Tags Cloud ---
+    st.markdown("#### 🔗 Related Mechanics & Tags")
+    tags_html = " ".join([f"<span style='background:#334155;padding:5px 10px;border-radius:15px;margin:5px;display:inline-block;font-size:0.9em;'>#{tag}</span>" for tag in info.get('tags', [])])
+    st.markdown(tags_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    # --- 3. Feasibility Check Form ---
+    st.subheader(f"🛠️ Build a {genre} Project")
+    st.info(f"Fill in your constraints below to see if a **{genre}** game is feasible for you.")
+
+    with st.form("wiki_feasibility_form"):
+        col1, col2 = st.columns(2)
+        story_input = st.text_area("Core Story Idea", "A hero saves the world...", height=80)
+        team_input = col1.number_input("Team Size", 1, 50, 3)
+        duration_input = col2.number_input("Months", 1, 36, 6)
+        budget_input = st.slider("Budget ($)", 1000, 100000, 10000)
+        
+        submitted = st.form_submit_button(f"🚀 Analyze Feasibility: {genre}")
+
+    if submitted:
+        with st.spinner(f"Simulating {genre} production pipeline..."):
+            result = st.session_state.game_client.evaluate_specific_genre(
+                genre, story_input, team_input, duration_input, budget_input
+            )
+            
+            if result:
+                status = result.get('status')
+                reason = result.get('reason')
+                
+                # Generate game or demo
+                if status in ['feasible_game', 'feasible_demo']:
+                    if status == 'feasible_game':
+                        st.success(f"✅ Greenlit! A full {genre} game is feasible.")
+                    else:
+                        st.warning(f"⚠️ Budget/Time Tight. Recommending a **Vertical Slice (Demo)** instead.")
+                        st.markdown(f"**Reason:** {reason}")
+
+                    item_data = result.get('data')
+                    item_data['name'] = item_data.get('name', f"{genre} Project") 
+                    
+                    st.session_state.selected_item = item_data
+                    st.session_state.selected_cat = 'wiki_generated' 
+                    if 'generated_media' not in st.session_state: st.session_state.generated_media = {}
+                    
+                    go_detail() 
+                    st.rerun()
+
+                # 情况 C: 不可行
+                else:
+                    st.error(f"❌ Not Feasible: {genre}")
+                    st.markdown(f"""
+                    <div style="padding:15px; background:rgba(239, 68, 68, 0.1); border:1px solid #ef4444; border-radius:8px;">
+                        <b>AI Analysis:</b> {reason}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown("### 💡 Alternative Options")
+                    st.write("Your constraints don't fit this specific genre. Would you like us to recommend genres that *do* fit?")
+                    
+                    if st.button("🔄 Auto-Recommend Suitable Genres"):
+                        with st.spinner("Pivoting strategy... Finding suitable genres..."):
+                             data = st.session_state.game_client.generate_proposal(
+                                 story_input, team_input, duration_input, budget_input
+                             )
+                             if data:
+                                st.session_state.proposals = data
+                                # Update lists
+                                all_genres = data.get('achievable_genres', [])
+                                all_demos = data.get('demo_ideas', [])
+                                st.session_state.visible_items['achievable'] = all_genres[:3]
+                                st.session_state.visible_items['demos'] = all_demos[:2]
+                                
+                                go_home() 
+                                st.rerun()
+
 # --- 5. Main Execution ---
 render_sidebar()
 
@@ -363,5 +491,7 @@ if st.session_state.view == 'modal':
     render_modal()
 elif st.session_state.view == 'detail':
     render_detail()
+elif st.session_state.view == 'wiki':
+    render_genre_wiki()
 else:
     render_home()
