@@ -456,7 +456,7 @@ def render_genre_wiki():
                     go_detail() 
                     st.rerun()
 
-                # 情况 C: 不可行
+                # Give reasons when it is impossible to recommend game genres
                 else:
                     st.error(f"❌ Not Feasible: {genre}")
                     st.markdown(f"""
@@ -495,3 +495,4 @@ elif st.session_state.view == 'wiki':
     render_genre_wiki()
 else:
     render_home()
+
