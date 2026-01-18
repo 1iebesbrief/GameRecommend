@@ -41,14 +41,11 @@ st.markdown("""
 
 # --- 2. State & Backend Setup ---
 if 'game_client' not in st.session_state:
-    # 错误写法：api_key = "" 
-    # 正确写法：从环境变量读取
     api_key = os.getenv("GOOGLE_API_KEY") 
     hf_token = os.getenv("HF_TOKEN")
     
-    # 确保 key 不为空再初始化，否则给出提示
     if not api_key:
-        st.error("未找到 GOOGLE_API_KEY，请检查 .env 文件！")
+        st.error("GOOGLE_API_KEY Not Found")
     
     st.session_state.game_client = GameAIClient(api_key, hf_token)
 
@@ -58,7 +55,6 @@ for k in base_keys:
     if k not in st.session_state:
         st.session_state[k] = None
 
-# 修复 TypeError 的核心：确保 generated_media 始终是字典 {}
 if 'generated_media' not in st.session_state or st.session_state.generated_media is None:
     st.session_state.generated_media = {}
 # For the filtering/recommendation logic
@@ -95,31 +91,89 @@ def handle_not_interested():
 
 # --- 4. Render Components ---
 
+import threading
+import time
+
+import threading
+import time
+import streamlit as st
+
 def render_sidebar():
     with st.sidebar:
         st.title("🛠️ Project Lab")
         
+        if 'is_analyzing' not in st.session_state:
+            st.session_state.is_analyzing = False
+        if 'game_client' not in st.session_state:
+            st.error("Game client not initialized. Please check your .env or backend setup.")
+            return
+
         st.markdown("### 📝 Constraints")
         story = st.text_area("Story Idea", "A cyberpunk detective solving crimes in dreams...", height=100)
         col1, col2 = st.columns(2)
-        team = col1.number_input("Team Size", 1, 50, 3)
-        duration = col2.number_input("Months", 1, 36, 6)
-        budget = st.slider("Budget ($)", 1000, 100000, 10000)
+        team = col1.number_input("Team Size", 1, 20, 3)
+        duration = col2.number_input("Months", 1, 24, 6)
+        budget = st.slider("Budget ($)", 0, 10000, 1000)
         
-        if st.button("🚀 Analyze & Generate", type="primary", use_container_width=True):
-            with st.spinner("AI Architect is analyzing constraints..."):
-                # Call the Service
-                data = st.session_state.game_client.generate_proposal(story, team, duration, budget)
+        if not st.session_state.is_analyzing:
+            if st.button("🚀 Analyze & Generate", type="primary", use_container_width=True):
+                st.session_state.is_analyzing = True
+                st.rerun()
+        else:
+            if st.button("🛑 Stop & Cancel Analysis", type="secondary", use_container_width=True):
+                st.session_state.is_analyzing = False
+                st.rerun()
+
+            status_placeholder = st.empty()
+            res_container = []
+            
+            client_instance = st.session_state.game_client
+
+            def run_ai_task(client):
+                try:
+                    res = client.generate_proposal(story, team, duration, budget)
+                    res_container.append(res)
+                except Exception as e:
+                    res_container.append(e)
+
+            ai_thread = threading.Thread(target=run_ai_task, args=(client_instance,))
+            ai_thread.start()
+
+            loading_messages = [
+                "🏗️ Architecting the game world...",
+                "📊 Analyzing feasibility and budget...",
+                "📚 Pulling classic references..."
+            ]
+            
+            msg_idx = 0
+            while ai_thread.is_alive():
+                with status_placeholder.container():
+                    st.markdown(f"""
+                    <div style="padding:15px; background:rgba(56, 189, 248, 0.1); border-radius:10px; border-left:4px solid #38bdf8;">
+                        <p style="margin:0; color:#38bdf8; font-weight:bold;">AI Architect is at work...</p>
+                        <p style="margin:0; font-size:0.9em; color:#cbd5e1;">{loading_messages[msg_idx % 3]}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                if data:
+                time.sleep(3)
+                msg_idx += 1
+                
+                if not st.session_state.is_analyzing:
+                    break
+
+            status_placeholder.empty()
+            if res_container and st.session_state.is_analyzing:
+                data = res_container[0]
+                st.session_state.is_analyzing = False 
+                
+                if isinstance(data, Exception):
+                    st.error(f"Analysis failed: {str(data)}")
+                elif data:
                     st.session_state.proposals = data
-                    # Initialize Lists: Show top 3 Genres, Top 2 Demos. Keep rest in "Hidden"
                     all_genres = data.get('achievable_genres', [])
                     all_demos = data.get('demo_ideas', [])
-                    
                     st.session_state.visible_items['achievable'] = all_genres[:3]
                     st.session_state.hidden_items['achievable'] = all_genres[3:]
-                    
                     st.session_state.visible_items['demos'] = all_demos[:2]
                     st.session_state.hidden_items['demos'] = all_demos[2:]
                     
@@ -176,30 +230,44 @@ def render_home():
 def render_modal():
     """
     Simulates a popup window for quick evaluation.
-    User decides to 'Interested' (Proceed) or 'Not Interested' (Swap).
+    User decides to 'Interested' (Proceed), 'Not Interested' (Swap), 
+    or 'Back to Dashboard' (Decide Later).
     """
     item = st.session_state.selected_item
     
-    # Use empty containers to center visually or just use layout
+    # Centered Layout
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 3, 1])
+    
     with col2:
         with st.container():
+            # Evaluation Card UI
             st.markdown(f"""
             <div class="modal-container">
-                <h2>🧐 Evaluate Strategy: {item['name']}</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin:0;">🧐 Evaluate Strategy: {item['name']}</h2>
+                </div>
+                <hr style="border-color: rgba(255,255,255,0.1);">
                 <p><b>Feasibility Analysis:</b> {item['reason']}</p>
-                <p>⏱️ <b>Est. Cycle:</b> {item.get('cycle', 'N/A')}</p>
+                <p>⏱️ <b>Est. Development Cycle:</b> {item.get('cycle', 'N/A')}</p>
             </div>
             """, unsafe_allow_html=True)
             
+            # First Row: Primary Decision Buttons
             c1, c2 = st.columns(2)
-            if c1.button("❌ Not Interested (Hide)", use_container_width=True):
+            if c1.button("❌ Not Interested (Hide & Swap)", use_container_width=True):
                 handle_not_interested()
                 st.rerun()
             if c2.button("✨ Interested (Deep Dive)", type="primary", use_container_width=True):
                 go_detail()
                 st.rerun()
+            
+            # Second Row: Neutral Navigation Button
+            st.write("") # Add a little spacing
+            if st.button("⬅️ Back to Dashboard (Decide Later)", use_container_width=True):
+                go_home()
+                st.rerun()
+                
     st.markdown("---")
 
 def render_detail():
@@ -219,38 +287,28 @@ def render_detail():
     col_media, col_text = st.columns([1, 1.5])
     
     with col_media:
-        # Image Generation
-        if media_key not in st.session_state.generated_media:
-            with st.spinner("Visualizing concept..."):
-                img = st.session_state.game_client.generate_image(item.get('visual_prompt', item['name']))
-                st.session_state.generated_media[media_key] = img
-        
         img_data = st.session_state.generated_media.get(media_key)
-        if img_data:
-            st.image(base64.b64decode(img_data), use_container_width=True, caption="AI Concept Art")
+    
+        if img_data and len(img_data) > 500: 
+            st.image(base64.b64decode(img_data), use_container_width=True)
         else:
-            st.warning("Image model warming up or token missing.")
+            if st.button("🎨 Recreate image"): 
+                pass
 
-        # Audio Generation
-        st.write("### Audio Atmosphere")
-        if st.button("🎵 Generate Soundscape"):
-            with st.spinner("Composing soundtrack..."):
-                aud = st.session_state.game_client.generate_audio(item.get('name'))
-                st.session_state.generated_media[audio_key] = aud
-                st.rerun()
-                
+        st.write("### 🎵 Game Background Music Preview")
         aud_data = st.session_state.generated_media.get(audio_key)
-        if aud_data:
+        if aud_data and len(aud_data) > 500:
             st.audio(base64.b64decode(aud_data), format="audio/wav")
-
-    with col_text:
+        else:
+            st.caption("The audio is currently queued or generation has failed. Please click the button below to retry.")
+        with col_text:
         # Game Details
-        st.markdown(f"<div class='highlight-box'><b>📢 One-Liner:</b><br>{details.get('release_blurb', 'N/A')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='highlight-box'><b>📢 One-Liner:</b><br>{details.get('release_blurb', 'N/A')}</div>", unsafe_allow_html=True)
         
-        st.subheader("Narrative & Gameplay")
-        st.write(f"**Protagonist:** {details.get('protagonist', 'N/A')}")
-        st.write(f"**Story Arc:** {details.get('storyline', 'N/A')}")
-        st.write(f"**Core Loop:** {details.get('core_loop', 'N/A')}")
+            st.subheader("Narrative & Gameplay")
+            st.write(f"**Protagonist:** {details.get('protagonist', 'N/A')}")
+            st.write(f"**Story Arc:** {details.get('storyline', 'N/A')}")
+            st.write(f"**Core Loop:** {details.get('core_loop', 'N/A')}")
         
         # Long-Term Prediction (Requirement 2)
         pred = details.get('full_game_prediction', {})
@@ -283,16 +341,13 @@ def render_detail():
     with col_pdf:
         if st.button("📥 Export Professional GDD (PDF)", type="primary", use_container_width=True):
             with st.spinner("Compiling PDF Report..."):
-                # 获取当前生成的图片（如果有）
                 img_data = st.session_state.generated_media.get(media_key)
                 
-                # 调用后端 service 的导出功能
                 pdf_bytes = st.session_state.game_client.export_pdf(
                     item, 
                     img_data
                 )
                 
-                # 触发下载
                 st.download_button(
                     label="Click to Download PDF",
                     data=pdf_bytes,
