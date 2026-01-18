@@ -105,4 +105,4 @@ def create_improved_pdf(data, img_b64=None):
     for ref in refs:
          body_text(f"- {ref.get('title')} ({ref.get('url')})")
 
-    return pdf.output(dest='S')
+    return pdf.output(dest='S').encode('latin-1')
