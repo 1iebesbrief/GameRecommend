@@ -3,6 +3,9 @@ import base64
 import os
 from dotenv import load_dotenv
 from backend import GameAIClient
+import threading
+import time
+
 
 load_dotenv()
 # --- 1. Init & Styles ---
@@ -93,13 +96,6 @@ def handle_not_interested():
 
 # --- 4. Render Components ---
 
-import threading
-import time
-
-import threading
-import time
-import streamlit as st
-
 def render_sidebar():
     with st.sidebar:
         st.title("🛠️ Project Lab")
@@ -183,8 +179,6 @@ def render_sidebar():
                     st.rerun()
 
 def render_home():
-    
-    # 1. System Intro
     st.markdown("""
     <div style="text-align: center; padding: 40px 20px;">
         <h1 style="background: -webkit-linear-gradient(45deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 3.5rem;">
@@ -217,7 +211,6 @@ def render_home():
                 st.rerun()
     
     st.markdown("---")
-
     
     if st.session_state.proposals:
         st.subheader("📋 Your Generated Proposals")
@@ -315,43 +308,71 @@ def render_detail():
         
     st.title(f"🚀 Design Blueprint: {item['name']}")
     
-    # 1. Media Section (Image & Audio)
+    # ---  Define Cache Key ---
     media_key = f"{item['name']}_img"
     audio_key = f"{item['name']}_audio"
     
+    # If the image is not present in the cache and has not yet been generated, it will automatically commence generation.
+    if media_key not in st.session_state.generated_media:
+        with st.spinner("🎨 AI Artist is painting the cover art... (Powered by SDXL)"):
+            # Conceptualise the prompt
+            image_prompt = f"Video game cover art for {item['name']}, {details.get('release_blurb', '')}, high quality, trending on artstation"
+            
+            # Call the backend to generate
+            img_data = st.session_state.game_client.generate_image(image_prompt)
+            
+            # Deposit into Session
+            if img_data:
+                st.session_state.generated_media[media_key] = img_data
+                st.rerun()
+            else:
+                st.error("Image generation failed. Check backend console.")
+
+
+    
+    # Page rendering
     col_media, col_text = st.columns([1, 1.5])
     
     with col_media:
         img_data = st.session_state.generated_media.get(media_key)
     
-        if img_data and len(img_data) > 500: 
+        if img_data: 
             st.image(base64.b64decode(img_data), use_container_width=True)
+            
+            if st.button("🔄 Regenerate Image"): 
+                # Clear old images -> Re-run -> Trigger the automatic generation logic above
+                del st.session_state.generated_media[media_key]
+                st.rerun()
         else:
-            if st.button("🎨 Recreate image"): 
-                pass
+            st.warning("Image failed to load.")
 
         st.write("### 🎵 Game Background Music Preview")
+        
+        # Audio Section
         aud_data = st.session_state.generated_media.get(audio_key)
-        if aud_data and len(aud_data) > 500:
+        if aud_data:
             st.audio(base64.b64decode(aud_data), format="audio/wav")
         else:
-            st.caption("The audio is currently queued or generation has failed. Please click the button below to retry.")
-        with col_text:
+            if st.button("🎹 Generate Soundtrack"):
+                with st.spinner("Composing music..."):
+                   
+                    pass 
+                    
+    with col_text:
         # Game Details
-            st.markdown(f"<div class='highlight-box'><b>📢 One-Liner:</b><br>{details.get('release_blurb', 'N/A')}</div>", unsafe_allow_html=True)
-        
-            st.subheader("Narrative & Gameplay")
-            st.write(f"**Protagonist:** {details.get('protagonist', 'N/A')}")
-            st.write(f"**Story Arc:** {details.get('storyline', 'N/A')}")
-            st.write(f"**Core Loop:** {details.get('core_loop', 'N/A')}")
-        
-        # Long-Term Prediction (Requirement 2)
+        st.markdown(f"<div class='highlight-box'><b>📢 One-Liner:</b><br>{details.get('release_blurb', 'N/A')}</div>", unsafe_allow_html=True)
+    
+        st.subheader("Narrative & Gameplay")
+        st.write(f"**Protagonist:** {details.get('protagonist', 'N/A')}")
+        st.write(f"**Story Arc:** {details.get('storyline', 'N/A')}")
+        st.write(f"**Core Loop:** {details.get('core_loop', 'N/A')}")
+    
+        # Long-Term Prediction
         pred = details.get('full_game_prediction', {})
         if pred:
             st.markdown(f"""
             <div class='success-box'>
                 <h4>🔮 Long-term Projection (Full Game)</h4>
-                <p>If you proceed to a full release after this phase:</p>
                 <ul>
                     <li><b>Projected Dev Cycle:</b> {pred.get('cycle', 'N/A')}</li>
                     <li><b>Projected Budget:</b> {pred.get('budget', 'N/A')}</li>
@@ -359,17 +380,6 @@ def render_detail():
             </div>
             """, unsafe_allow_html=True)
 
-    # 2. Classic References (Requirement 2 & 3)
-    st.divider()
-    st.subheader("🔗 Classic References")
-    refs = item.get('classic_references', [])
-    if refs:
-        cols_ref = st.columns(3)
-        for idx, link in enumerate(refs):
-            with cols_ref[idx % 3]:
-                st.markdown(f"**[{link.get('title', 'Game Link')}]({link.get('url', '#')})**")
-    else:
-        st.caption("No specific references found.")
     
     st.divider()
     col_pdf, _ = st.columns([1, 2])
@@ -438,7 +448,7 @@ def render_genre_wiki():
                 status = result.get('status')
                 reason = result.get('reason')
                 
-                # Generate game or demo
+                # Scenarios A & B: Feasible (Full Game or Demo)
                 if status in ['feasible_game', 'feasible_demo']:
                     if status == 'feasible_game':
                         st.success(f"✅ Greenlit! A full {genre} game is feasible.")
@@ -446,17 +456,21 @@ def render_genre_wiki():
                         st.warning(f"⚠️ Budget/Time Tight. Recommending a **Vertical Slice (Demo)** instead.")
                         st.markdown(f"**Reason:** {reason}")
 
+                    # Wrap the generated data into Item format and directly reuse the existing Detail page logic
                     item_data = result.get('data')
+                    # Supplement the fields required for the details page
                     item_data['name'] = item_data.get('name', f"{genre} Project") 
                     
+                    # Additional fields required for the details page
                     st.session_state.selected_item = item_data
-                    st.session_state.selected_cat = 'wiki_generated' 
+                    st.session_state.selected_cat = 'wiki_generated'
+                    # Ensure the key exists in the media dictionary to prevent errors.
                     if 'generated_media' not in st.session_state: st.session_state.generated_media = {}
                     
-                    go_detail() 
+                    go_detail() # Jump to details page
                     st.rerun()
 
-                # Give reasons when it is impossible to recommend game genres
+                # Scenario C: Not feasible
                 else:
                     st.error(f"❌ Not Feasible: {genre}")
                     st.markdown(f"""
@@ -469,19 +483,22 @@ def render_genre_wiki():
                     st.write("Your constraints don't fit this specific genre. Would you like us to recommend genres that *do* fit?")
                     
                     if st.button("🔄 Auto-Recommend Suitable Genres"):
+                        # This invokes the sidebar's original logic
+                        # triggering regeneration, akin to clicking the sidebar's Generate button
                         with st.spinner("Pivoting strategy... Finding suitable genres..."):
                              data = st.session_state.game_client.generate_proposal(
                                  story_input, team_input, duration_input, budget_input
                              )
                              if data:
                                 st.session_state.proposals = data
-                                # Update lists
+                                # Update list
                                 all_genres = data.get('achievable_genres', [])
                                 all_demos = data.get('demo_ideas', [])
                                 st.session_state.visible_items['achievable'] = all_genres[:3]
                                 st.session_state.visible_items['demos'] = all_demos[:2]
                                 
-                                go_home() 
+                                go_home() # Return to the homepage to view the new results
+
                                 st.rerun()
 
 # --- 5. Main Execution ---
@@ -495,4 +512,3 @@ elif st.session_state.view == 'wiki':
     render_genre_wiki()
 else:
     render_home()
-
