@@ -4,7 +4,9 @@ import requests
 import time
 import base64
 from google import genai
-from .pdf_generator import create_improved_pdf
+from backend.pdf_generator import create_manual_pdf, convert_html_to_pdf, get_fallback_html
+from huggingface_hub import InferenceClient
+import io
 
 class GameAIClient:
     """
@@ -14,9 +16,10 @@ class GameAIClient:
     def __init__(self, api_key=None, hf_token=None):
         self.api_key = api_key if api_key else os.environ.get("GOOGLE_API_KEY", "")
         self.client = genai.Client(api_key=self.api_key)
-        self.hf_token = hf_token
+        self.hf_token = os.environ.get("HF_TOKEN", "")
         self.hf_music_url = "https://huggingface.co/facebook/musicgen-small"
-        self.hf_image_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+        self.hf_image_url = "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
+        self.hf_coder_url = "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct"
 
     def generate_proposal(self, story, team_size, duration, budget):
         """
@@ -95,22 +98,24 @@ class GameAIClient:
             return None
 
     def generate_image(self, prompt):
-        """Generates an image via Hugging Face API."""
-        if not self.hf_token: return None
-        headers = {"Authorization": f"Bearer {self.hf_token}"}
-        payload = {"inputs": f"Concept art, video game style, masterpiece, {prompt}"}
-        
-        try:
-            response = requests.post(self.hf_image_url, headers=headers, json=payload, timeout=30)
-            if response.status_code == 200:
-                return base64.b64encode(response.content).decode('utf-8')
-            elif response.status_code == 503: # Cold start retry
-                time.sleep(5)
-                response = requests.post(self.hf_image_url, headers=headers, json=payload, timeout=30)
-                if response.status_code == 200:
-                    return base64.b64encode(response.content).decode('utf-8')
-            return None
-        except Exception: return None
+
+        client = InferenceClient(
+        provider="nscale",
+        api_key=self.hf_token,
+        )
+
+        image = client.text_to_image(
+        prompt,
+        model="stabilityai/stable-diffusion-xl-base-1.0",
+        )
+
+        image.save("test_output3.png")
+            # Convert the image into a Base64 string
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            
+        return img_str
 
     def generate_audio(self, prompt):
         """Generates audio via Hugging Face API."""
@@ -125,10 +130,68 @@ class GameAIClient:
             return None
         except Exception: return None
 
-    def export_pdf(self, data, img_b64=None):
-        """Wrapper to call the separated PDF generator"""
-        return create_improved_pdf(data, img_b64)
-    
+    def generate_html_design(self, data, img_b64=None):
+        """
+        Responsible solely for generating HTML code strings
+        """
+        if not self.hf_token: 
+            return get_fallback_html(data)
+
+        genre = data.get('name', 'Game')
+        details = data.get('details', {})
+        
+        prompt_content = f"""
+        You are an expert Frontend Developer. 
+        Task: Create a highly stylized, single-file HTML5 Design Document.
+        
+        Game Info:
+        - Title: {genre}
+        - Theme: {genre} style (e.g. Cyberpunk=neon, Fantasy=parchment).
+        - Description: {details.get('release_blurb', 'N/A')}
+        - Core Loop: {details.get('core_loop', 'N/A')}
+        
+        Requirements:
+        1. Use internal CSS (<style>) for aggressive styling.
+        2. RETURN ONLY VALID HTML CODE. Start with <!DOCTYPE html>.
+        """
+
+        payload = {
+            "inputs": prompt_content,
+            "parameters": {"max_new_tokens": 2048, "temperature": 0.7, "return_full_text": False}
+        }
+        
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+
+        try:
+            response = requests.post(self.hf_coder_url, headers=headers, json=payload, timeout=60)
+            result = response.json()
+            
+            if isinstance(result, list) and len(result) > 0:
+                html_code = result[0].get('generated_text', '')
+                html_code = html_code.replace("```html", "").replace("```", "").strip()
+                
+                if img_b64:
+                    img_tag = f'<div style="text-align:center; margin:20px 0;"><img src="data:image/png;base64,{img_b64}" style="max-width:80%; border-radius:10px;"></div>'
+                    if "<body>" in html_code:
+                        html_code = html_code.replace("<body>", f"<body>{img_tag}")
+                    else:
+                        html_code = f"{img_tag}{html_code}"
+                
+                return html_code
+            else:
+                return get_fallback_html(data)
+                
+        except Exception as e:
+            print(f"Coder API Error: {e}")
+            return get_fallback_html(data)
+
+    def export_pdf(self, data, img_b64=None, use_ai_design=False):
+
+        if use_ai_design:
+            html_content = self.generate_html_design(data, img_b64)
+            return convert_html_to_pdf(html_content)
+        else:
+            return create_manual_pdf(data, img_b64)
 
 
     def get_genre_wiki_info(self, genre_name):
