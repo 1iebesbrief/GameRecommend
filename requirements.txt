@@ -1,0 +1,28 @@
+# --- Web Framework & UI ---
+# Used in app1.py for the web interface and session management
+streamlit>=1.30.0
+
+# --- Environment Management ---
+# Used in app1.py to load API keys from .env file
+python-dotenv>=1.0.0
+
+# --- AI & LLM SDKs ---
+# Used in services.py for Gemini 2.5 Logic (using the new 'google.genai' namespace)
+google-genai>=0.3.0
+
+# Used in services.py for Stable Diffusion & MusicGen (InferenceClient)
+huggingface_hub>=0.23.0
+
+# Used in services.py for raw API calls (Qwen Coder)
+requests>=2.31.0
+
+# --- PDF Generation & Image Processing ---
+# Used in pdf_generator.py (Method B) to convert AI-generated HTML to PDF
+# This is a pure Python library, no external tools like wkhtmltopdf needed.
+xhtml2pdf>=0.2.16
+
+# Used in pdf_generator.py (Method A) for manual PDF layout
+fpdf>=1.7.2
+
+# Used in pdf_generator.py to handle image data (PIL)
+Pillow>=10.0.0
