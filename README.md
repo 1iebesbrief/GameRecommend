@@ -1,4 +1,4 @@
-🎮 Indie Game Studio Pro: An AI-Powered Creative Support ToolCourse: 4036GENAIY - Generative AI Research Project (Semester 1, 2025-26) 3Type: Creative Support Tool (CST) / Co-Creative System 
+🎮 Indie Game Studio Pro: An AI-Powered Creative Support Tool
 
 Project Overview
 Indie Game Studio Pro is a multi-modal Creative Support Tool designed to assist independent game developers during the Ideation and Pre-production stages of game development5.
