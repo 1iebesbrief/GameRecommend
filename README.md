@@ -12,12 +12,12 @@ Target Audience: Indie game developers, hobbyists, and solo creators.
 Creative Value: Reducing the friction between a "raw idea" and a "structured proposal" by automating asset prototyping and documentation.
 
 🚀 Key Features
-1. 🧠 Intelligent Feasibility Analysis (Logic Layer)Uses Google Gemini 2.5 to analyze abstract user constraints (Story Idea, Team Size, Budget, Duration).
+1. 🧠 Intelligent Feasibility Analysis (Logic Layer) Uses Google Gemini 2.5 to analyze abstract user constraints (Story Idea, Team Size, Budget, Duration).
    It acts as an executive producer, determining if a project is commercially viable or better suited as a "Vertical Slice" (Demo).
-2. 🎨 & 🎵 Multi-Modal Asset GenerationIntegrates Hugging Face Inference APIs to prototype assets instantly:
+2. 🎨 & 🎵 Multi-Modal Asset Generation Integrates Hugging Face Inference APIs to prototype assets instantly:
    Visuals: Generates cover art and concept visualizations using Stable Diffusion XL 1.0.Audio: Composes looping background music and soundtracks using Facebook MusicGen Small.
 3. 📄 Automated GDD Generation (HTML/PDF)Solving the tedious task of documentation.
-   The system uses Qwen 2.5 Coder to generate stylized HTML5 code based on the game's theme (e.g., Cyberpunk styling for a Sci-Fi game), which is then converted into a professional PDF Game Design Document (GDD).
+   The system uses Google Gemini 2.5 Flash to generate stylized HTML5 code based on the game's theme (e.g., Cyberpunk styling for a Sci-Fi game), which is then converted into a professional PDF Game Design Document (GDD).
 4. 📚 Genre EncyclopediaA knowledge retrieval module that helps users explore game mechanics and genre definitions, powered by LLM knowledge bases.
 
 
@@ -25,7 +25,7 @@ Creative Value: Reducing the friction between a "raw idea" and a "structured pro
 Logic & Text Engine: Powered by Google Gemini 2.5 Flash (via Google GenAI) — Responsible for core game logic analysis, feasibility reasoning, and generating narrative text content.
 Visual Art Generation: Powered by Stable Diffusion XL 1.0 (via Hugging Face Hub) — tasked with generating high-quality game cover art and visual concepts.
 Audio Synthesis: Powered by Facebook MusicGen Small (via Hugging Face Hub) — Used to compose original background music (BGM) and loops.
-Code & Layout: Powered by Qwen 2.5 Coder 7B (via Hugging Face Hub) — Specialized in generating the HTML/CSS code required for rendering professional PDF reports.
+Code & Layout: Powered by Google Gemini 2.5 Flash (via Google GenAI)  — Specialized in generating the HTML/CSS code required for rendering professional PDF reports.
 
 
 Project Structure
@@ -34,9 +34,10 @@ GameRecommend/
 ├── backend/
 │   ├── __init__.py
 │   ├── services.py         # AI Client logic (Gemini & HF integration)
+|   ├── text_to_music.py    # AI Music Demo Generation logic (HF integration)
 │   └── pdf_generator.py    # PDF conversion logic (xhtml2pdf/fpdf)
 ├── requirements.txt        # Python dependencies
-├── .env                    # API Keys (Not included in repo)
+├── .env                    # API Keys
 └── README.md               # Documentation
 
 
@@ -44,7 +45,7 @@ GameRecommend/
 Prerequisites:
 Python 3.10+
 Google AI Studio API Key
-Hugging Face Access Token (Must have Inference permissions)
+Hugging Face Access Token
 
 Setup Steps:
 Clone the repository:Bashgit clone https://github.com/YourUsername/GameRecommend.git
