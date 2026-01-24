@@ -355,8 +355,13 @@ def render_detail():
         else:
             if st.button("🎹 Generate Soundtrack"):
                 with st.spinner("Composing music..."):
-                   
-                    pass 
+                    music_prompt = st.session_state.game_client.compose_music_prompt(item)
+                    audio_b64 = st.session_state.game_client.generate_audio(music_prompt)
+                    if audio_b64:
+                        st.session_state.generated_media[audio_key] = audio_b64
+                        st.rerun()
+                    else:
+                        st.error("Audio generation failed. Check backend console.")
                     
     with col_text:
         # Game Details
