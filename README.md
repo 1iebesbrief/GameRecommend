@@ -48,7 +48,7 @@ Google AI Studio API Key
 Hugging Face Access Token
 
 Setup Steps:
-Clone the repository:Bashgit clone https://github.com/YourUsername/GameRecommend.git
+Clone the repository:Bashgit clone https://github.com/1iebesbrief/GameRecommend.git
 cd GameRecommend
 Install dependencies:Bashpip install -r requirements.txt
 Configure Environment:Create a .env file in the root directory and add your keys:Code snippetGOOGLE_API_KEY=your_google_api_key_here
